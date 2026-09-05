@@ -25,7 +25,7 @@ function weightedPick(cards: DeckRow[]): DeckRow {
 
 async function drawCard(excludePillar?: Pillar): Promise<DeckRow> {
   const recent = new Set(await getRecent());
-  let pool = await db.deck.toArray();
+  const pool = await db.deck.toArray();
   let candidates = pool.filter(
     (c) => !recent.has(c.id) && (!excludePillar || c.pillar !== excludePillar)
   );

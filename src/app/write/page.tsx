@@ -16,8 +16,7 @@ export default function WritePage() {
   const router = useRouter();
   const [day, setDay] = useState<CurrentDay | null>(null);
   const [mode, setMode] = useState<Mode>('paper');
-  const [now, setNow] = useState(Date.now());
-  const [expired, setExpired] = useState(false);
+  const [now, setNow] = useState(0);
   const [autopsyOpen, setAutopsyOpen] = useState(false);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [transcribing, setTranscribing] = useState<Record<string, boolean>>({});
@@ -29,7 +28,9 @@ export default function WritePage() {
   const [pendingQuestions, setPendingQuestions] = useState<string[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dayRef = useRef<CurrentDay | null>(null);
-  dayRef.current = day;
+  useEffect(() => {
+    dayRef.current = day;
+  }, [day]);
 
   // Load session; bounce home if none in progress.
   useEffect(() => {
@@ -54,13 +55,15 @@ export default function WritePage() {
 
   // Ambient timer
   useEffect(() => {
+    const first = setTimeout(() => setNow(Date.now()), 0);
     const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
   }, []);
 
-  useEffect(() => {
-    if (day?.endsAt && now >= day.endsAt) setExpired(true);
-  }, [now, day]);
+  const expired = !!(now > 0 && day?.endsAt && now >= day.endsAt);
 
   // Write-through draft persistence (debounced): losing work is the one unforgivable bug.
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,6 +111,7 @@ export default function WritePage() {
   async function onPhoto(file: File) {
     const blob = await compressImage(file);
     const pid = newId();
+    // eslint-disable-next-line react-hooks/purity -- runs in a change-event handler, not render
     await db.photos.add({ id: pid, blob, createdAt: Date.now() });
     const url = URL.createObjectURL(blob);
     setPhotoUrls((u) => ({ ...u, [pid]: url }));
@@ -187,7 +191,6 @@ export default function WritePage() {
   }
 
   async function extendTen() {
-    setExpired(false);
     await persistNow({ ...dayRef.current!, endsAt: dayRef.current!.endsAt! + 10 * 60_000 });
   }
 
