@@ -1,0 +1,307 @@
+/* Forge — a working tool, not a product.
+   Tokens: paper, ink, accent, faint, rule. Nothing else. */
+
+:root {
+  --paper: #fafbfc;
+  --ink: #16181d;
+  --ink-soft: #5c616b;
+  --accent: #232e9b;
+  --rule: rgba(22, 24, 29, 0.14);
+  --measure: 42rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101216;
+    --ink: #e9eaee;
+    --ink-soft: #9aa0ab;
+    --accent: #9aa6ff;
+    --rule: rgba(233, 234, 238, 0.16);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 17px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-serif), Georgia, serif;
+  line-height: 1.55;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+main {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 6.5rem;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+textarea,
+input[type='text'],
+input[type='search'] {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: 0.4rem 0;
+  width: 100%;
+  outline: none;
+  border-radius: 0;
+}
+
+textarea:focus,
+input:focus {
+  border-bottom-color: var(--accent);
+}
+
+::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+/* Buttons say what they do. Primary uses the accent; everything else is ink. */
+.btn {
+  background: var(--accent);
+  color: var(--paper);
+  border: none;
+  padding: 0.65rem 1.1rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-quiet {
+  background: none;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 0.6rem 1.05rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn-text:disabled {
+  text-decoration: none;
+  cursor: default;
+}
+
+a {
+  color: inherit;
+}
+
+.small {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.rule {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 1.25rem 0;
+}
+
+/* The assignment is the hero. */
+.hero {
+  font-size: 1.7rem;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 480px) {
+  .hero {
+    font-size: 1.95rem;
+  }
+}
+
+.struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-soft);
+  color: var(--ink-soft);
+}
+
+/* Persistent bottom bar: Capture and History, nothing else. */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 3.5rem;
+  padding: 0.85rem 0 calc(0.85rem + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  z-index: 10;
+}
+
+.bottom-bar button,
+.bottom-bar a {
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+  font-style: italic;
+}
+
+/* Timer bar: one of only two moving things in the app. */
+.timer-track {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--rule);
+  z-index: 20;
+}
+
+.timer-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 1s linear;
+}
+
+/* Modal scrim — used by Capture and Autopsy. No cards, but a modal needs a surface. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--paper);
+  z-index: 30;
+  overflow-y: auto;
+}
+
+.scrim-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+/* Autopsy fields: a rule between fields encodes the sequence. */
+.autopsy-field {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.autopsy-field label {
+  display: block;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-bottom: 0.2rem;
+}
+
+.autopsy-field textarea {
+  border-bottom: none;
+  resize: none;
+  overflow: hidden;
+  min-height: 1.7rem;
+}
+
+/* History list */
+.day-entry {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tabs {
+  display: flex;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  margin: 1.25rem 0 0.5rem;
+}
+
+.tabs button {
+  background: none;
+  border: none;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.tabs button[aria-selected='true'] {
+  color: var(--ink);
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: -1px;
+}
+
+.thumb {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.material-strip {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.pillar-label {
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.counter {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.q-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+img.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--paper);
+  z-index: 40;
+  cursor: pointer;
+}
