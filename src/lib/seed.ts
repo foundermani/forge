@@ -48,20 +48,53 @@ const SEED: Array<[Pillar, string]> = [
   ['form', 'Tell a story strictly backward. Last event first.'],
   ['form', "Map the full structure of a song you admire: what changes each section, what's withheld, where the title lands, where the melody peaks, where the turn is. Then write a skeleton that borrows the *shape* only."],
   ['form', 'Write a song whose emotional climax happens before the first chorus.'],
+
+  // Batch 2 (added later). APPEND ONLY — ids are index-based, so reordering or
+  // inserting above this line would corrupt decks already living on devices.
+  // Language
+  ['language', 'Write six lines where the verbs do all the emotional work. Then delete every adjective and see what survives.'],
+  ['language', "Catch a cliché you actually use. Write the specific memory it's been hiding."],
+  ['language', 'Describe a color to someone blind since birth, in eight lines, without naming any color.'],
+  ['language', 'Write four lines, then cut every word the lines can live without. What remains is the lyric.'],
+  ['language', 'Write a verse that never names its subject. Let the title do the naming.'],
+  // Observation
+  ['observation', 'Watch one stranger for five minutes. Write the story their hands tell.'],
+  ['observation', 'List every sound in the room you are in right now. Turn the quietest one into a first line.'],
+  ['observation', "Describe today's weather only through what people did about it."],
+  ['observation', "Write the exact moment someone's face changed this week — in slow motion, one line per instant."],
+  ['observation', 'Find the ugliest thing on your street. Give it the attention a love song gets.'],
+  // Thought
+  ['thought', "Write forgiveness as a transaction: who pays, in what currency, and what's the change."],
+  ['thought', "Take something you're proud of. Write the verse that asks what it cost."],
+  ['thought', 'Write nostalgia as an unreliable narrator defending itself.'],
+  ['thought', 'Write an argument where both people are right. No winner allowed.'],
+  ['thought', 'Write about home as a question: is it a place or a time? Do not answer it.'],
+  // Music as meaning
+  ['music', 'Write a topline where the highest note lands on the least important word. Notice what breaks, then fix it.'],
+  ['music', 'Take a happy melody you know and write the saddest true lyric it will hold.'],
+  ['music', 'Write a verse from short notes only, then a chorus from held notes only. Say what the contrast means.'],
+  ['music', "Write a melody that keeps landing on an unresolved tone, for a narrator who can't say the thing."],
+  ['music', 'Write a line whose most important word is replaced by a rest. Make the silence sing it.'],
+  // Form
+  ['form', 'Tell the same story as three voicemails, months apart. Nothing else.'],
+  ['form', 'Open and close the song with the same line, and let everything between change what it means.'],
+  ['form', 'Write a list song: every line an item, no connective tissue, the order doing the storytelling.'],
+  ['form', 'Write a duet for one voice — two characters share the lines, and only the pronouns tell them apart.'],
+  ['form', 'Write a song that lasts exactly as long as the moment it describes: one red light, one held breath.'],
 ];
 
 export async function ensureSeeded(): Promise<void> {
-  const count = await db.deck.count();
-  if (count > 0) return;
-  await db.deck.bulkAdd(
-    SEED.map(([pillar, text], i) => ({
-      id: `seed-${i + 1}`,
-      pillar,
-      text,
-      weight: 1,
-      timesServed: 0,
-      timesRerolled: 0,
-      source: 'seed' as const,
-    }))
-  );
+  // Top-up, not first-run-only: cards already on the device keep their weight
+  // and serve/reroll counts; only ids the deck doesn't have yet are added.
+  const existing = new Set(await db.deck.toCollection().primaryKeys());
+  const missing = SEED.map(([pillar, text], i) => ({
+    id: `seed-${i + 1}`,
+    pillar,
+    text,
+    weight: 1,
+    timesServed: 0,
+    timesRerolled: 0,
+    source: 'seed' as const,
+  })).filter((c) => !existing.has(c.id));
+  if (missing.length > 0) await db.deck.bulkAdd(missing);
 }
