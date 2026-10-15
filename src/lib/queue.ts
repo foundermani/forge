@@ -62,9 +62,14 @@ export async function runVoicePassIfDue(): Promise<void> {
   const days = (await db.days.orderBy('completedAt').reverse().limit(40).toArray()).map(
     (d) => ({
       date: d.id,
-      pillar: d.pillar,
+      pillar: d.pillar ?? null,
+      disciplines: d.disciplines ?? null,
+      operation: d.operation ?? null,
+      output: d.output ?? null,
+      intensity: d.intensity ?? null,
       assignment: d.assignmentText,
       assignmentId: d.assignmentId,
+      itemIds: d.seedIds ?? [d.assignmentId],
       rerolled: d.rerolled,
       pieceText: d.pieceText ?? null,
       autopsy: d.autopsy,
@@ -72,7 +77,13 @@ export async function runVoicePassIfDue(): Promise<void> {
   );
   const rerollLog = (await db.deck.toArray())
     .filter((c) => c.timesRerolled > 0)
-    .map((c) => ({ assignmentId: c.id, pillar: c.pillar, text: c.text, timesRerolled: c.timesRerolled }));
+    .map((c) => ({
+      assignmentId: c.id,
+      discipline: c.discipline ?? c.pillar,
+      kind: c.kind,
+      text: c.text,
+      timesRerolled: c.timesRerolled,
+    }));
   const profile = await getMeta<VoiceProfile>('voiceProfile');
 
   try {

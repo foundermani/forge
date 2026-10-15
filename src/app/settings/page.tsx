@@ -4,6 +4,96 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db, getMeta, setMeta, type VoiceProfile } from '@/lib/db';
 import { exportAll, importAll } from '@/lib/backup';
+import { getCrossFrequency, getDisciplineWeights } from '@/lib/draw';
+import {
+  DEFAULT_WEIGHTS,
+  DISCIPLINES,
+  DISCIPLINE_ORDER,
+  type CrossFrequency,
+  type Discipline,
+} from '@/lib/disciplines';
+
+// Relative weights: they needn't total 100; shares are shown normalized.
+function DisciplineBalance() {
+  const [weights, setWeights] = useState<Record<Discipline, number> | null>(null);
+  const [cross, setCross] = useState<CrossFrequency>('sometimes');
+
+  useEffect(() => {
+    (async () => {
+      setWeights(await getDisciplineWeights());
+      setCross(await getCrossFrequency());
+    })();
+  }, []);
+
+  if (!weights) return null;
+  const total = DISCIPLINE_ORDER.reduce((s, d) => s + (weights[d] || 0), 0) || 1;
+
+  async function update(next: Record<Discipline, number>) {
+    setWeights(next);
+    await setMeta('disciplineWeights', next);
+  }
+
+  async function chooseCross(c: CrossFrequency) {
+    setCross(c);
+    await setMeta('crossFrequency', c);
+  }
+
+  return (
+    <section>
+      <p>Discipline balance</p>
+      <p className="small" style={{ margin: '0.4rem 0 0.6rem' }}>
+        How often each discipline comes up. Rebalance as your needs evolve.
+      </p>
+      {DISCIPLINE_ORDER.map((d) => (
+        <div
+          key={d}
+          style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', padding: '0.2rem 0' }}
+        >
+          <span style={{ flex: 1, fontSize: '0.95rem' }}>{DISCIPLINES[d].label}</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={100}
+            aria-label={`Weight for ${DISCIPLINES[d].label}`}
+            value={weights[d]}
+            onChange={(e) => {
+              const n = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+              update({ ...weights, [d]: n });
+            }}
+            style={{
+              width: '3.2rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid var(--rule)',
+              textAlign: 'right',
+              font: 'inherit',
+              color: 'inherit',
+            }}
+          />
+          <span className="small" style={{ width: '2.6rem', textAlign: 'right' }}>
+            {Math.round(((weights[d] || 0) / total) * 100)}%
+          </span>
+        </div>
+      ))}
+      <button className="btn-text" style={{ marginTop: '0.5rem' }} onClick={() => update({ ...DEFAULT_WEIGHTS })}>
+        reset to suggested balance
+      </button>
+
+      <p style={{ marginTop: '1.25rem' }}>Cross-disciplinary sessions</p>
+      <p className="small" style={{ margin: '0.4rem 0 0.6rem' }}>
+        Two or three disciplines fused into one problem.
+      </p>
+      <div className="intensity" role="radiogroup" aria-label="Cross-disciplinary frequency">
+        {(['off', 'sometimes', 'often'] as CrossFrequency[]).map((c) => (
+          <button key={c} role="radio" aria-checked={cross === c} onClick={() => chooseCross(c)}>
+            {c}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const [appName, setAppName] = useState('Forge');
@@ -96,6 +186,10 @@ export default function SettingsPage() {
           </p>
         )}
       </section>
+
+      <hr className="rule" />
+
+      <DisciplineBalance />
 
       <hr className="rule" />
 

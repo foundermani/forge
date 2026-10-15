@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
+import type { Discipline, Intensity, Operation, Output, Ratings } from './disciplines';
 
 export type Pillar = 'language' | 'observation' | 'thought' | 'music' | 'form';
-export type Depth = 15 | 30 | 60;
 
 export interface Autopsy {
   problemSolved: string;
@@ -9,19 +9,32 @@ export interface Autopsy {
   bestLine: string;
   changeTomorrow: string;
   principle: string;
+  ratings?: Ratings; // self-assessed 1–5 against the five criteria (Forge 2)
+}
+
+export interface PressureTest {
+  questions: string[];
+  answers: string[];
+  criteria?: string[]; // criterion each question targets (Forge 2)
 }
 
 export interface DayRow {
   id: string; // '2026-09-05' — one row per completion; extra same-day completions get ':2', ':3' suffixes
   assignmentId: string;
   assignmentText: string; // snapshot, so deck edits never rewrite history
-  pillar: Pillar;
-  depth: Depth;
+  pillar?: Pillar; // Forge 1 days only
+  kind?: 'classic' | 'composed';
+  disciplines?: Discipline[];
+  operation?: Operation;
+  output?: Output;
+  seedIds?: string[];
+  intensity?: Intensity;
+  depth: number; // minutes
   rerolled: boolean;
   rerolledFromId?: string;
   pieceText?: string;
   photoIds: string[];
-  pressureTest?: { questions: string[]; answers: string[] };
+  pressureTest?: PressureTest;
   autopsy?: Autopsy;
   completedAt?: number;
 }
@@ -53,7 +66,9 @@ export interface AudioRow {
 
 export interface DeckRow {
   id: string;
-  pillar: Pillar;
+  pillar?: Pillar;
+  discipline?: Discipline;
+  kind?: 'classic' | 'seed'; // classic = complete authored assignment; seed = subject the engine composes from
   text: string;
   weight: number;
   timesServed: number;
@@ -82,17 +97,26 @@ export interface CurrentDay {
   date: string;
   assignmentId: string;
   assignmentText: string;
-  pillar: Pillar;
+  kind?: 'classic' | 'composed';
+  disciplines?: Discipline[];
+  operation?: Operation;
+  output?: Output;
+  seedIds?: string[];
+  seedTexts?: string[];
+  composed?: boolean; // false until the composer has turned the seeds into a finished prompt
+  scopes?: string[]; // per-intensity scope lines from the composer
+  pillar?: Pillar; // legacy
   rerolled: boolean;
   rerolledFromId?: string;
-  depth?: Depth;
+  intensity?: Intensity;
+  depth?: number;
   startedAt?: number;
   endsAt?: number;
   draftText?: string;
   mode?: 'paper' | 'type';
   photoIds?: string[];
   transcriptions?: Record<string, string>; // photoId -> corrected text
-  pressureTest?: { questions: string[]; answers: string[] };
+  pressureTest?: PressureTest;
   completionsToday: number;
   completedAt?: number; // set when this drawn assignment was completed (Today shows done state)
 }

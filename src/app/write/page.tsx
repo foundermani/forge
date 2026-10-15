@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { db, getMeta, setMeta, newId, type CurrentDay, type MaterialRow } from '@/lib/db';
 import { saveCurrentDay } from '@/lib/draw';
-import { abandonSession, completeDay, countLines } from '@/lib/day';
+import { abandonSession, completeDay, countLines, countWords } from '@/lib/day';
+import { INTENSITIES, exerciseMeta } from '@/lib/disciplines';
 import { compressImage } from '@/lib/image';
 import { transcribePhoto, pressureTest } from '@/lib/ai';
 import AutopsyModal from '@/components/AutopsyModal';
@@ -26,6 +27,7 @@ export default function WritePage() {
   const [pressureError, setPressureError] = useState('');
   const [pendingAnswers, setPendingAnswers] = useState<string[]>([]);
   const [pendingQuestions, setPendingQuestions] = useState<string[] | null>(null);
+  const [pendingCriteria, setPendingCriteria] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const dayRef = useRef<CurrentDay | null>(null);
   useEffect(() => {
@@ -101,7 +103,13 @@ export default function WritePage() {
   ].join('\n');
   const lines = countLines(allText);
   const pressureDone = !!day.pressureTest;
-  const pressureAvailable = lines >= 4 && !pressureDone && !pendingQuestions;
+  // Four lines of verse, or a short paragraph of prose (a thesis, a character sketch).
+  const enoughToTest = lines >= 4 || countWords(allText) >= 40;
+  const pressureAvailable = enoughToTest && !pressureDone && !pendingQuestions;
+  const meta = exerciseMeta(day);
+  const scope = day.intensity
+    ? day.scopes?.[day.intensity - 1] ?? INTENSITIES[day.intensity - 1].scope
+    : undefined;
 
   async function switchMode(m: Mode) {
     setMode(m);
@@ -159,9 +167,10 @@ export default function WritePage() {
     setPressureBusy(true);
     setPressureError('');
     try {
-      const qs = await pressureTest(day!.assignmentText, allText);
-      setPendingQuestions(qs);
-      setPendingAnswers(qs.map(() => ''));
+      const { questions, criteria } = await pressureTest(day!.assignmentText, allText, meta);
+      setPendingQuestions(questions);
+      setPendingCriteria(criteria);
+      setPendingAnswers(questions.map(() => ''));
     } catch (e) {
       setPressureError((e as Error).message);
     } finally {
@@ -173,7 +182,7 @@ export default function WritePage() {
     const cur = dayRef.current!;
     await persistNow({
       ...cur,
-      pressureTest: { questions: pendingQuestions!, answers: pendingAnswers },
+      pressureTest: { questions: pendingQuestions!, answers: pendingAnswers, criteria: pendingCriteria },
     });
     setPendingQuestions(null);
   }
@@ -221,7 +230,19 @@ export default function WritePage() {
         </div>
       )}
 
-      <p style={{ fontStyle: 'italic', color: 'var(--ink-soft)' }}>{day.assignmentText}</p>
+      <p style={{ fontStyle: 'italic', color: 'var(--ink-soft)', whiteSpace: 'pre-line' }}>
+        {day.assignmentText}
+      </p>
+      {meta && (
+        <p className="small" style={{ marginTop: '0.35rem' }}>
+          {meta}
+        </p>
+      )}
+      {scope && (
+        <p className="small" style={{ marginTop: '0.15rem' }}>
+          {INTENSITIES[day.intensity! - 1].name} — {scope}
+        </p>
+      )}
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={mode === 'paper'} onClick={() => switchMode('paper')}>
@@ -319,6 +340,7 @@ export default function WritePage() {
           <p className="pillar-label">pressure test</p>
           {pendingQuestions.map((q, i) => (
             <div className="q-item" key={i}>
+              {pendingCriteria[i] && <p className="small" style={{ fontStyle: 'italic' }}>{pendingCriteria[i].toLowerCase()}</p>}
               <p>{q}</p>
               <textarea
                 rows={1}
@@ -347,6 +369,11 @@ export default function WritePage() {
         <div style={{ marginTop: '1.5rem' }}>
           {day.pressureTest.questions.map((q, i) => (
             <div className="q-item" key={i}>
+              {day.pressureTest!.criteria?.[i] && (
+                <p className="small" style={{ fontStyle: 'italic' }}>
+                  {day.pressureTest!.criteria[i].toLowerCase()}
+                </p>
+              )}
               <p>{q}</p>
               <p className="small" style={{ marginTop: '0.3rem' }}>
                 {day.pressureTest!.answers[i]}

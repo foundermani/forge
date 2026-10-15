@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { db, dayNumber, getCounters, type Counters, type DayRow, type MaterialRow } from '@/lib/db';
 import { daysSinceBackup } from '@/lib/backup';
+import { CRITERIA, MISSION, exerciseMeta, intensityName } from '@/lib/disciplines';
 
 type Tab = 'days' | 'principles' | 'material';
 
@@ -45,6 +46,9 @@ export default function HistoryPage() {
           </p>
           <p className="small">
             Day {dayNumber(counters.startDate)} · started {startedLabel}
+          </p>
+          <p className="pillar-label" style={{ marginTop: '0.35rem' }}>
+            {MISSION}
           </p>
           {backupAge !== null && backupAge > 30 && (
             <p className="small" style={{ marginTop: '0.5rem' }}>
@@ -119,9 +123,13 @@ function DaysTab({ days }: { days: DayRow[] }) {
             style={{ background: 'none', border: 'none', textAlign: 'left', width: '100%', cursor: 'pointer' }}
           >
             <p className="small">
-              {formatDate(d.id)} · <span className="pillar-label">{d.pillar === 'music' ? 'music as meaning' : d.pillar}</span>
+              {formatDate(d.id)}
+              {intensityName(d.intensity) && <> · {intensityName(d.intensity)}</>}
             </p>
-            <p style={{ marginTop: '0.2rem' }}>{d.assignmentText}</p>
+            <p style={{ marginTop: '0.2rem', whiteSpace: 'pre-line' }}>{d.assignmentText}</p>
+            <p className="pillar-label" style={{ marginTop: '0.2rem', fontSize: '0.85rem' }}>
+              {exerciseMeta(d)}
+            </p>
           </button>
           {open === d.id && (
             <div style={{ marginTop: '0.9rem' }}>
@@ -150,7 +158,10 @@ function DaysTab({ days }: { days: DayRow[] }) {
                   <p className="pillar-label">pressure test</p>
                   {d.pressureTest.questions.map((q, i) => (
                     <div key={i} style={{ margin: '0.5rem 0' }}>
-                      <p className="small" style={{ fontStyle: 'italic' }}>{q}</p>
+                      <p className="small" style={{ fontStyle: 'italic' }}>
+                        {d.pressureTest!.criteria?.[i] && <>{d.pressureTest!.criteria[i].toLowerCase()} · </>}
+                        {q}
+                      </p>
                       <p>{d.pressureTest!.answers[i]}</p>
                     </div>
                   ))}
@@ -164,6 +175,11 @@ function DaysTab({ days }: { days: DayRow[] }) {
                   <AutopsyLine label="Best line" value={d.autopsy.bestLine} />
                   <AutopsyLine label="Change tomorrow" value={d.autopsy.changeTomorrow} />
                   <AutopsyLine label="Learned" value={d.autopsy.principle} />
+                  {d.autopsy.ratings && (
+                    <p className="small" style={{ marginTop: '0.5rem' }}>
+                      {CRITERIA.map((c) => `${c.label.toLowerCase()} ${d.autopsy!.ratings![c.key]}`).join(' · ')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

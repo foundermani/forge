@@ -1,66 +1,142 @@
-import { db, getMeta, setMeta, todayId, type CurrentDay, type DeckRow, type Pillar } from './db';
+import { db, getMeta, setMeta, todayId, type CurrentDay, type DeckRow } from './db';
 import { ensureSeeded } from './seed';
+import {
+  CROSS_PROBABILITY,
+  DEFAULT_WEIGHTS,
+  DISCIPLINES,
+  DISCIPLINE_ORDER,
+  OPERATIONS,
+  PILLAR_TO_DISCIPLINE,
+  pickWeighted,
+  type CrossFrequency,
+  type Discipline,
+  type Output,
+} from './disciplines';
 
-const RECENT_KEY = 'recentlyServed'; // last 14 assignment ids, newest last
+const RECENT_KEY = 'recentlyServed'; // recently dealt card ids, newest last
+const RECENT_SIZE = 40;
+const CLASSIC_SHARE = 0.25; // chance a single-discipline draw deals an authored classic
 
 async function getRecent(): Promise<string[]> {
   return (await getMeta<string[]>(RECENT_KEY)) ?? [];
 }
 
-async function pushRecent(id: string): Promise<void> {
-  const recent = await getRecent();
-  const next = [...recent.filter((r) => r !== id), id].slice(-14);
-  await setMeta(RECENT_KEY, next);
+async function markServed(cards: DeckRow[]): Promise<void> {
+  for (const c of cards) await db.deck.update(c.id, { timesServed: c.timesServed + 1 });
+  const ids = cards.map((c) => c.id);
+  const recent = (await getRecent()).filter((r) => !ids.includes(r));
+  await setMeta(RECENT_KEY, [...recent, ...ids].slice(-RECENT_SIZE));
 }
 
-function weightedPick(cards: DeckRow[]): DeckRow {
-  const total = cards.reduce((s, c) => s + Math.max(c.weight, 0.01), 0);
-  let r = Math.random() * total;
-  for (const c of cards) {
-    r -= Math.max(c.weight, 0.01);
-    if (r <= 0) return c;
-  }
-  return cards[cards.length - 1];
+export async function getDisciplineWeights(): Promise<Record<Discipline, number>> {
+  const saved = await getMeta<Partial<Record<Discipline, number>>>('disciplineWeights');
+  return { ...DEFAULT_WEIGHTS, ...(saved ?? {}) };
 }
 
-async function drawCard(excludePillar?: Pillar): Promise<DeckRow> {
+export async function getCrossFrequency(): Promise<CrossFrequency> {
+  return (await getMeta<CrossFrequency>('crossFrequency')) ?? 'sometimes';
+}
+
+function pickCard(cards: DeckRow[], recent: Set<string>): DeckRow {
+  const fresh = cards.filter((c) => !recent.has(c.id));
+  const pool = fresh.length ? fresh : cards;
+  return pickWeighted(pool.map((c) => [c, c.weight] as [DeckRow, number]));
+}
+
+type Drawn = Pick<
+  CurrentDay,
+  'kind' | 'assignmentId' | 'assignmentText' | 'disciplines' | 'operation' | 'output' | 'seedIds' | 'seedTexts' | 'composed'
+>;
+
+// One problem: pick discipline(s) by weight, then either an authored classic
+// or seed subject(s) plus an operation and an output for the composer.
+async function drawProblem(exclude: Discipline[] = []): Promise<Drawn> {
+  const deck = await db.deck.toArray();
   const recent = new Set(await getRecent());
-  const pool = await db.deck.toArray();
-  let candidates = pool.filter(
-    (c) => !recent.has(c.id) && (!excludePillar || c.pillar !== excludePillar)
-  );
-  if (candidates.length === 0) {
-    candidates = pool.filter((c) => !excludePillar || c.pillar !== excludePillar);
+  const weights = await getDisciplineWeights();
+  const crossP = CROSS_PROBABILITY[await getCrossFrequency()];
+
+  const hasSeeds = (d: Discipline) => deck.some((c) => c.kind === 'seed' && c.discipline === d);
+  let candidates = DISCIPLINE_ORDER.filter((d) => hasSeeds(d) && !exclude.includes(d));
+  if (candidates.length === 0) candidates = DISCIPLINE_ORDER.filter(hasSeeds);
+  const weighted = (ds: Discipline[]) => ds.map((d) => [d, weights[d] ?? 0] as [Discipline, number]);
+
+  const disciplines: Discipline[] = [pickWeighted(weighted(candidates))];
+  if (Math.random() < crossP) {
+    const n = Math.random() < 0.15 ? 3 : 2;
+    while (disciplines.length < n) {
+      const rest = candidates.filter((d) => !disciplines.includes(d));
+      if (rest.length === 0) break;
+      disciplines.push(pickWeighted(weighted(rest)));
+    }
   }
-  if (candidates.length === 0) candidates = pool;
-  return weightedPick(candidates);
+
+  if (disciplines.length === 1) {
+    const classics = deck.filter(
+      (c) => c.kind === 'classic' && c.discipline === disciplines[0] && !recent.has(c.id)
+    );
+    if (classics.length > 0 && Math.random() < CLASSIC_SHARE) {
+      const card = pickCard(classics, recent);
+      await markServed([card]);
+      return {
+        kind: 'classic',
+        assignmentId: card.id,
+        assignmentText: card.text,
+        disciplines,
+        seedIds: [card.id],
+        composed: true,
+      };
+    }
+  }
+
+  const seeds = disciplines.map((d) =>
+    pickCard(deck.filter((c) => c.kind === 'seed' && c.discipline === d), recent)
+  );
+  await markServed(seeds);
+  const affinity = Object.entries(DISCIPLINES[disciplines[0]].outputs) as Array<[Output, number]>;
+  return {
+    kind: 'composed',
+    assignmentId: seeds[0].id,
+    assignmentText: seeds.map((s) => s.text).join('\n'),
+    disciplines,
+    operation: OPERATIONS[Math.floor(Math.random() * OPERATIONS.length)],
+    output: pickWeighted(affinity),
+    seedIds: seeds.map((s) => s.id),
+    seedTexts: seeds.map((s) => s.text),
+    composed: false,
+  };
 }
 
-// Get (or create) today's assignment. Persisted immediately so reopening shows the same one.
+// A day saved by Forge 1 has a pillar but no disciplines; give it one so the
+// rest of the app can treat every day the same way.
+function normalize(day: CurrentDay): CurrentDay {
+  if (day.disciplines?.length) return day;
+  const discipline: Discipline = day.pillar ? PILLAR_TO_DISCIPLINE[day.pillar] : 'wordcraft';
+  return { ...day, kind: 'classic', composed: true, disciplines: [discipline], seedIds: [day.assignmentId] };
+}
+
+// Get (or create) today's problem. Persisted immediately so reopening shows the same one.
 export async function getCurrentDay(): Promise<CurrentDay> {
   await ensureSeeded();
   const today = todayId();
   const existing = await getMeta<CurrentDay>('currentDay');
-  if (existing && existing.date === today) return existing;
-
-  const card = await drawCard();
-  await db.deck.update(card.id, { timesServed: card.timesServed + 1 });
-  await pushRecent(card.id);
+  if (existing && existing.date === today) {
+    const day = normalize(existing);
+    if (day !== existing) await saveCurrentDay(day);
+    return day;
+  }
   const day: CurrentDay = {
     date: today,
-    assignmentId: card.id,
-    assignmentText: card.text,
-    pillar: card.pillar,
+    ...(await drawProblem()),
     rerolled: false,
-    completionsToday: existing && existing.date === today ? existing.completionsToday : await countCompletionsToday(),
+    completionsToday: await countCompletionsToday(),
   };
-  await setMeta('currentDay', day);
+  await saveCurrentDay(day);
   return day;
 }
 
 async function countCompletionsToday(): Promise<number> {
-  const today = todayId();
-  const rows = await db.days.where('id').startsWith(today).toArray();
+  const rows = await db.days.where('id').startsWith(todayId()).toArray();
   return rows.filter((r) => r.completedAt).length;
 }
 
@@ -68,43 +144,32 @@ export async function saveCurrentDay(day: CurrentDay): Promise<void> {
   await setMeta('currentDay', day);
 }
 
-// One reroll per day: swap to a different pillar; log the dodged assignment.
+// Unlimited rerolls: swap to different discipline(s); log the dodged cards
+// (the reroll counts tell the voice pass what gets skipped).
 export async function reroll(day: CurrentDay): Promise<CurrentDay> {
-  if (day.rerolled) return day;
-  const dodged = await db.deck.get(day.assignmentId);
-  if (dodged) {
-    await db.deck.update(dodged.id, { timesRerolled: dodged.timesRerolled + 1 });
+  for (const id of day.seedIds ?? [day.assignmentId]) {
+    const card = await db.deck.get(id);
+    if (card) await db.deck.update(id, { timesRerolled: card.timesRerolled + 1 });
   }
-  const card = await drawCard(day.pillar);
-  await db.deck.update(card.id, { timesServed: card.timesServed + 1 });
-  await pushRecent(card.id);
   const next: CurrentDay = {
-    ...day,
-    assignmentId: card.id,
-    assignmentText: card.text,
-    pillar: card.pillar,
+    date: day.date,
+    ...(await drawProblem(day.disciplines ?? [])),
     rerolled: true,
     rerolledFromId: day.assignmentId,
+    completionsToday: day.completionsToday,
   };
   await saveCurrentDay(next);
   return next;
 }
 
-// After completing today's assignment: "Draw another problem".
+// After completing today's problem: "Draw another problem".
 export async function drawAnother(): Promise<CurrentDay> {
-  const today = todayId();
-  const card = await drawCard();
-  await db.deck.update(card.id, { timesServed: card.timesServed + 1 });
-  await pushRecent(card.id);
-  const rows = await db.days.where('id').startsWith(today).toArray();
   const day: CurrentDay = {
-    date: today,
-    assignmentId: card.id,
-    assignmentText: card.text,
-    pillar: card.pillar,
+    date: todayId(),
+    ...(await drawProblem()),
     rerolled: false,
-    completionsToday: rows.filter((r) => r.completedAt).length,
+    completionsToday: await countCompletionsToday(),
   };
-  await setMeta('currentDay', day);
+  await saveCurrentDay(day);
   return day;
 }

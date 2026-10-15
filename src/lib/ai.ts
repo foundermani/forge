@@ -19,16 +19,18 @@ export async function transcribePhoto(
 
 export async function pressureTest(
   assignment: string,
-  text: string
-): Promise<string[]> {
+  text: string,
+  context?: string
+): Promise<{ questions: string[]; criteria: string[] }> {
   const res = await fetch('/api/claude/pressure', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assignment, text }),
+    body: JSON.stringify({ assignment, text, context }),
   });
   if (!res.ok) throw new Error('Pressure test failed — check your connection and try again.');
   const data = await res.json();
-  return data.questions as string[];
+  const questions = data.questions as string[];
+  return { questions, criteria: (data.criteria as string[] | undefined) ?? questions.map(() => '') };
 }
 
 export async function tagMaterial(text: string): Promise<string[]> {

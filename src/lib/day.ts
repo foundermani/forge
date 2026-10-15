@@ -6,7 +6,6 @@ import {
   type Autopsy,
   type CurrentDay,
   type DayRow,
-  type Depth,
 } from './db';
 
 // Submitting the autopsy is the only way a day becomes real.
@@ -22,7 +21,13 @@ export async function completeDay(day: CurrentDay, autopsy: Autopsy): Promise<vo
     assignmentId: day.assignmentId,
     assignmentText: day.assignmentText,
     pillar: day.pillar,
-    depth: (day.depth ?? 15) as Depth,
+    kind: day.kind,
+    disciplines: day.disciplines,
+    operation: day.operation,
+    output: day.output,
+    seedIds: day.seedIds,
+    intensity: day.intensity,
+    depth: day.depth ?? 15,
     rerolled: day.rerolled,
     rerolledFromId: day.rerolledFromId,
     pieceText: pieceText || undefined,
@@ -43,16 +48,36 @@ export async function completeDay(day: CurrentDay, autopsy: Autopsy): Promise<vo
   await setMeta('counters', { ...counters, problemsSolved: counters.problemsSolved + 1 });
 
   const done: CurrentDay = {
-    date: day.date,
-    assignmentId: day.assignmentId,
-    assignmentText: day.assignmentText,
-    pillar: day.pillar,
-    rerolled: day.rerolled,
-    rerolledFromId: day.rerolledFromId,
+    ...problemOf(day),
     completionsToday: day.completionsToday + 1,
     completedAt: Date.now(),
   };
   await setMeta('currentDay', done);
+}
+
+// The drawn problem itself, without any session work attached to it.
+function problemOf(day: CurrentDay): CurrentDay {
+  return {
+    date: day.date,
+    assignmentId: day.assignmentId,
+    assignmentText: day.assignmentText,
+    kind: day.kind,
+    disciplines: day.disciplines,
+    operation: day.operation,
+    output: day.output,
+    seedIds: day.seedIds,
+    seedTexts: day.seedTexts,
+    composed: day.composed,
+    scopes: day.scopes,
+    pillar: day.pillar,
+    rerolled: day.rerolled,
+    rerolledFromId: day.rerolledFromId,
+    completionsToday: day.completionsToday,
+  };
+}
+
+export function countWords(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
 function buildPieceText(day: CurrentDay): string {
@@ -69,16 +94,7 @@ function buildPieceText(day: CurrentDay): string {
 
 // Abandoning records nothing; the same assignment stays available today.
 export async function abandonSession(day: CurrentDay): Promise<void> {
-  const reset: CurrentDay = {
-    date: day.date,
-    assignmentId: day.assignmentId,
-    assignmentText: day.assignmentText,
-    pillar: day.pillar,
-    rerolled: day.rerolled,
-    rerolledFromId: day.rerolledFromId,
-    completionsToday: day.completionsToday,
-  };
-  await setMeta('currentDay', reset);
+  await setMeta('currentDay', problemOf(day));
 }
 
 export function countLines(text: string): number {

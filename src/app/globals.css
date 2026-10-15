@@ -290,6 +290,39 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/* Intensity 1–5 and criterion ratings: a quiet row of numerals. Selection is
+   ink, not accent — the accent is reserved for the timer, counter and primary buttons. */
+.intensity,
+.rating {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.intensity button,
+.rating button {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  padding: 0.45rem 0;
+  cursor: pointer;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating button {
+  flex: 0 0 2.3rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.intensity button[aria-checked='true'],
+.rating button[aria-checked='true'] {
+  border-color: var(--ink);
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .q-item {
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--rule);
