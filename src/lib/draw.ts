@@ -2,15 +2,20 @@ import { db, getMeta, setMeta, todayId, type CurrentDay, type DeckRow } from './
 import { ensureSeeded } from './seed';
 import {
   CROSS_PROBABILITY,
+  DEFAULT_TRANSFER_WEIGHTS,
   DEFAULT_WEIGHTS,
-  DISCIPLINES,
   DISCIPLINE_ORDER,
   OPERATIONS,
   PILLAR_TO_DISCIPLINE,
+  TRANSFER_ORDER,
+  exerciseMeta,
+  pickOutput,
   pickWeighted,
   type CrossFrequency,
   type Discipline,
+  type Operation,
   type Output,
+  type TransferMode,
 } from './disciplines';
 
 const RECENT_KEY = 'recentlyServed'; // recently dealt card ids, newest last
@@ -37,6 +42,47 @@ export async function getCrossFrequency(): Promise<CrossFrequency> {
   return (await getMeta<CrossFrequency>('crossFrequency')) ?? 'sometimes';
 }
 
+export async function getTransferWeights(): Promise<Record<TransferMode, number>> {
+  const saved = await getMeta<Partial<Record<TransferMode, number>>>('transferWeights');
+  return { ...DEFAULT_TRANSFER_WEIGHTS, ...(saved ?? {}) };
+}
+
+// Forge's memory of its own assignments (shown, rerolled or not), so it can
+// avoid dealing the same exercise in new words. Newest last.
+const ASSIGNED_KEY = 'recentExercises';
+const ASSIGNED_SIZE = 20;
+
+export interface AssignedExercise {
+  disciplines: Discipline[];
+  operation?: Operation;
+  output?: Output;
+  transferMode?: TransferMode;
+  text: string;
+}
+
+export async function getRecentExercises(): Promise<AssignedExercise[]> {
+  return (await getMeta<AssignedExercise[]>(ASSIGNED_KEY)) ?? [];
+}
+
+export async function recordExercise(
+  day: Pick<CurrentDay, 'disciplines' | 'operation' | 'output' | 'transferMode' | 'assignmentText'>
+): Promise<void> {
+  const entry: AssignedExercise = {
+    disciplines: day.disciplines ?? [],
+    operation: day.operation,
+    output: day.output,
+    transferMode: day.transferMode,
+    text: day.assignmentText,
+  };
+  await setMeta(ASSIGNED_KEY, [...(await getRecentExercises()), entry].slice(-ASSIGNED_SIZE));
+}
+
+// One line per recent exercise for the composer: its mechanics, then its text.
+export function describeExercise(x: AssignedExercise): string {
+  const mode = x.transferMode ? ` [${x.transferMode}]` : '';
+  return `${exerciseMeta(x)}${mode}: ${x.text.replace(/\s+/g, ' ')}`;
+}
+
 function pickCard(cards: DeckRow[], recent: Set<string>): DeckRow {
   const fresh = cards.filter((c) => !recent.has(c.id));
   const pool = fresh.length ? fresh : cards;
@@ -45,7 +91,16 @@ function pickCard(cards: DeckRow[], recent: Set<string>): DeckRow {
 
 type Drawn = Pick<
   CurrentDay,
-  'kind' | 'assignmentId' | 'assignmentText' | 'disciplines' | 'operation' | 'output' | 'seedIds' | 'seedTexts' | 'composed'
+  | 'kind'
+  | 'assignmentId'
+  | 'assignmentText'
+  | 'disciplines'
+  | 'operation'
+  | 'output'
+  | 'transferMode'
+  | 'seedIds'
+  | 'seedTexts'
+  | 'composed'
 >;
 
 // One problem: pick discipline(s) by weight, then either an authored classic
@@ -78,7 +133,7 @@ async function drawProblem(exclude: Discipline[] = []): Promise<Drawn> {
     if (classics.length > 0 && Math.random() < CLASSIC_SHARE) {
       const card = pickCard(classics, recent);
       await markServed([card]);
-      return {
+      const classic: Drawn = {
         kind: 'classic',
         assignmentId: card.id,
         assignmentText: card.text,
@@ -86,6 +141,8 @@ async function drawProblem(exclude: Discipline[] = []): Promise<Drawn> {
         seedIds: [card.id],
         composed: true,
       };
+      await recordExercise(classic);
+      return classic;
     }
   }
 
@@ -93,14 +150,23 @@ async function drawProblem(exclude: Discipline[] = []): Promise<Drawn> {
     pickCard(deck.filter((c) => c.kind === 'seed' && c.discipline === d), recent)
   );
   await markServed(seeds);
-  const affinity = Object.entries(DISCIPLINES[disciplines[0]].outputs) as Array<[Output, number]>;
+
+  // Vary the mechanics, not just the subject: skip the last few operations
+  // and damp recently used outputs.
+  const assigned = await getRecentExercises();
+  const recentOps = assigned.slice(-3).map((x) => x.operation);
+  const recentOutputs = assigned.slice(-2).flatMap((x) => (x.output ? [x.output] : []));
+  const ops = OPERATIONS.filter((o) => !recentOps.includes(o));
+  const transferWeights = await getTransferWeights();
+  const transferMode = pickWeighted(TRANSFER_ORDER.map((m) => [m, transferWeights[m]] as [TransferMode, number]));
   return {
     kind: 'composed',
     assignmentId: seeds[0].id,
     assignmentText: seeds.map((s) => s.text).join('\n'),
     disciplines,
-    operation: OPERATIONS[Math.floor(Math.random() * OPERATIONS.length)],
-    output: pickWeighted(affinity),
+    operation: ops[Math.floor(Math.random() * ops.length)],
+    output: pickOutput(disciplines[0], transferMode, recentOutputs),
+    transferMode,
     seedIds: seeds.map((s) => s.id),
     seedTexts: seeds.map((s) => s.text),
     composed: false,

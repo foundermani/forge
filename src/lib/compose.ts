@@ -1,5 +1,5 @@
 import { getMeta, type CurrentDay } from './db';
-import { saveCurrentDay } from './draw';
+import { describeExercise, getRecentExercises, recordExercise, saveCurrentDay } from './draw';
 import { DISCIPLINES, OUTPUT_LABELS } from './disciplines';
 
 const inflight = new Map<string, Promise<CurrentDay>>();
@@ -25,8 +25,10 @@ export function composeDay(day: CurrentDay): Promise<CurrentDay> {
 
 async function run(day: CurrentDay): Promise<CurrentDay> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  // Generous: the server may judge and regenerate before it answers.
+  const timer = setTimeout(() => ctrl.abort(), 30000);
   try {
+    const recent = (await getRecentExercises()).slice(-12).map(describeExercise);
     const res = await fetch('/api/claude/compose', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,6 +41,8 @@ async function run(day: CurrentDay): Promise<CurrentDay> {
         })),
         operation: day.operation,
         output: day.output ? OUTPUT_LABELS[day.output] : '',
+        transferMode: day.transferMode ?? 'direct',
+        recent,
       }),
     });
     if (!res.ok) return day;
@@ -57,6 +61,7 @@ async function run(day: CurrentDay): Promise<CurrentDay> {
       composed: true,
     };
     await saveCurrentDay(next);
+    await recordExercise(next);
     return next;
   } catch {
     return day;

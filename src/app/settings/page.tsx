@@ -4,28 +4,40 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { db, getMeta, setMeta, type VoiceProfile } from '@/lib/db';
 import { exportAll, importAll } from '@/lib/backup';
-import { getCrossFrequency, getDisciplineWeights } from '@/lib/draw';
+import { getCrossFrequency, getDisciplineWeights, getTransferWeights } from '@/lib/draw';
 import {
+  DEFAULT_TRANSFER_WEIGHTS,
   DEFAULT_WEIGHTS,
   DISCIPLINES,
   DISCIPLINE_ORDER,
+  TRANSFER_MODES,
+  TRANSFER_ORDER,
   type CrossFrequency,
   type Discipline,
+  type TransferMode,
 } from '@/lib/disciplines';
 
 // Relative weights: they needn't total 100; shares are shown normalized.
 function DisciplineBalance() {
   const [weights, setWeights] = useState<Record<Discipline, number> | null>(null);
   const [cross, setCross] = useState<CrossFrequency>('sometimes');
+  const [transfer, setTransfer] = useState<Record<TransferMode, number> | null>(null);
 
   useEffect(() => {
     (async () => {
       setWeights(await getDisciplineWeights());
       setCross(await getCrossFrequency());
+      setTransfer(await getTransferWeights());
     })();
   }, []);
 
-  if (!weights) return null;
+  if (!weights || !transfer) return null;
+  const transferTotal = TRANSFER_ORDER.reduce((s, m) => s + (transfer[m] || 0), 0) || 1;
+
+  async function updateTransfer(next: Record<TransferMode, number>) {
+    setTransfer(next);
+    await setMeta('transferWeights', next);
+  }
   const total = DISCIPLINE_ORDER.reduce((s, d) => s + (weights[d] || 0), 0) || 1;
 
   async function update(next: Record<Discipline, number>) {
@@ -91,6 +103,55 @@ function DisciplineBalance() {
           </button>
         ))}
       </div>
+
+      <p style={{ marginTop: '1.25rem' }}>Song focus</p>
+      <p className="small" style={{ margin: '0.4rem 0 0.6rem' }}>
+        How often an exercise reaches for a song directly, trains a skill songs need, or just explores.
+      </p>
+      {TRANSFER_ORDER.map((m) => (
+        <div
+          key={m}
+          style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', padding: '0.2rem 0' }}
+        >
+          <span style={{ flex: 1, fontSize: '0.95rem' }}>
+            {TRANSFER_MODES[m].label}
+            <span className="small" style={{ display: 'block' }}>
+              {TRANSFER_MODES[m].description}
+            </span>
+          </span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={100}
+            aria-label={`Weight for ${TRANSFER_MODES[m].label} exercises`}
+            value={transfer[m]}
+            onChange={(e) => {
+              const n = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+              updateTransfer({ ...transfer, [m]: n });
+            }}
+            style={{
+              width: '3.2rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid var(--rule)',
+              textAlign: 'right',
+              font: 'inherit',
+              color: 'inherit',
+            }}
+          />
+          <span className="small" style={{ width: '2.6rem', textAlign: 'right' }}>
+            {Math.round(((transfer[m] || 0) / transferTotal) * 100)}%
+          </span>
+        </div>
+      ))}
+      <button
+        className="btn-text"
+        style={{ marginTop: '0.5rem' }}
+        onClick={() => updateTransfer({ ...DEFAULT_TRANSFER_WEIGHTS })}
+      >
+        reset to 40 / 40 / 20
+      </button>
     </section>
   );
 }

@@ -35,7 +35,13 @@ export type Operation =
   | 'compress'
   | 'expand';
 
-export type Output = 'lyric' | 'fragment' | 'metaphor' | 'thesis' | 'character' | 'melody' | 'concept';
+export type Output = 'lyric' | 'fragment' | 'metaphor' | 'thesis' | 'character' | 'melody' | 'concept' | 'notes';
+
+// How directly an exercise reaches for songwriting.
+//   direct   — makes something for a song: a lyric, melody, hook, or song concept
+//   indirect — trains a faculty that transfers to songwriting, without mentioning music
+//   open     — explores an idea with no artistic deliverable
+export type TransferMode = 'direct' | 'indirect' | 'open';
 
 export type Intensity = 1 | 2 | 3 | 4 | 5;
 
@@ -150,7 +156,37 @@ export const OUTPUT_LABELS: Record<Output, string> = {
   character: 'a character',
   melody: 'a melodic phrase',
   concept: 'a song concept',
+  notes: 'an open exploration',
 };
+
+export const TRANSFER_MODES: Record<TransferMode, { label: string; description: string; weight: number }> = {
+  direct: { label: 'direct', description: 'A lyric, melody, hook, or song concept.', weight: 40 },
+  indirect: { label: 'indirect', description: 'Trains a skill songs need, without mentioning music.', weight: 40 },
+  open: { label: 'open', description: 'Explore an idea. Nothing to deliver.', weight: 20 },
+};
+
+export const TRANSFER_ORDER = Object.keys(TRANSFER_MODES) as TransferMode[];
+
+export const DEFAULT_TRANSFER_WEIGHTS: Record<TransferMode, number> = Object.fromEntries(
+  TRANSFER_ORDER.map((m) => [m, TRANSFER_MODES[m].weight])
+) as Record<TransferMode, number>;
+
+const SONG_OUTPUTS: Output[] = ['lyric', 'melody', 'concept'];
+const SKILL_OUTPUTS: Output[] = ['fragment', 'metaphor', 'thesis', 'character'];
+
+// Pick an output that fits both the lead discipline and the transfer mode.
+// Outputs used recently are damped, not banned.
+export function pickOutput(discipline: Discipline, mode: TransferMode, recent: Output[] = []): Output {
+  if (mode === 'open') return 'notes';
+  const allowed = mode === 'direct' ? SONG_OUTPUTS : SKILL_OUTPUTS;
+  const affinity = (Object.entries(DISCIPLINES[discipline].outputs) as Array<[Output, number]>).filter(([o]) =>
+    allowed.includes(o)
+  );
+  const pool: Array<[Output, number]> = affinity.length
+    ? affinity
+    : allowed.filter((o) => o !== 'melody' || discipline === 'prosody').map((o) => [o, 1]);
+  return pickWeighted(pool.map(([o, w]) => [o, recent.includes(o) ? w * 0.3 : w] as [Output, number]));
+}
 
 export interface IntensityLevel {
   level: Intensity;

@@ -66,6 +66,7 @@ export async function runVoicePassIfDue(): Promise<void> {
       disciplines: d.disciplines ?? null,
       operation: d.operation ?? null,
       output: d.output ?? null,
+      transferMode: d.transferMode ?? null,
       intensity: d.intensity ?? null,
       assignment: d.assignmentText,
       assignmentId: d.assignmentId,

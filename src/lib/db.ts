@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Discipline, Intensity, Operation, Output, Ratings } from './disciplines';
+import type { Discipline, Intensity, Operation, Output, Ratings, TransferMode } from './disciplines';
 
 export type Pillar = 'language' | 'observation' | 'thought' | 'music' | 'form';
 
@@ -27,6 +27,7 @@ export interface DayRow {
   disciplines?: Discipline[];
   operation?: Operation;
   output?: Output;
+  transferMode?: TransferMode;
   seedIds?: string[];
   intensity?: Intensity;
   depth: number; // minutes
@@ -101,6 +102,7 @@ export interface CurrentDay {
   disciplines?: Discipline[];
   operation?: Operation;
   output?: Output;
+  transferMode?: TransferMode;
   seedIds?: string[];
   seedTexts?: string[];
   composed?: boolean; // false until the composer has turned the seeds into a finished prompt
